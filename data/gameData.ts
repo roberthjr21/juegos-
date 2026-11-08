@@ -311,6 +311,49 @@ const dares = [
 
 const truthMeta = (i: number): [Intensity, Category[], boolean] => i >= 100 ? ['picante', ['romantico', 'personal'], true] : i < 25 ? ['suave', ['personal', 'amistad'], true] : i < 50 ? ['coqueto', ['romantico', 'personal'], true] : i < 70 ? ['suave', ['personal', 'bienestar'], true] : i < 90 ? ['divertido', ['humor', 'imaginacion'], true] : ['suave', ['personal', 'bienestar'], true]
 const dareMeta = (i: number): [Intensity, Category[], boolean] => i >= 100 ? ['picante', ['romantico', 'creatividad'], true] : i < 40 ? ['divertido', ['humor', 'creatividad'], true] : i < 70 ? ['suave', ['llamada', 'creatividad'], true] : i < 90 ? ['coqueto', ['romantico', 'creatividad'], true] : ['suave', ['bienestar', 'llamada'], true]
-export const activities: Activity[] = [...truths.map((text, i) => { const [intensity, categories, callFriendly] = truthMeta(i); return { id: `v-${i+1}`, text, type: 'verdad' as const, intensity, categories, callFriendly } }), ...dares.map((text, i) => { const [intensity, categories, callFriendly] = dareMeta(i); return { id: `r-${i+1}`, text, type: 'reto' as const, intensity, categories, callFriendly } })]
+
+/** Retos que requieren interactuar con quienes están físicamente presentes. */
+const inPersonDares: Activity[] = [
+  'Inventa un saludo con otra persona del grupo que esté a tu lado.',
+  'Intercambia lugares con alguien que quiera participar.',
+  'Imita una pose que haga alguien que esté contigo.',
+  'Haz una coreografía sincronizada de diez segundos con alguien voluntario.',
+  'Jueguen piedra, papel o tijera con la persona de tu derecha.',
+  'Pasa un objeto ligero entre los participantes sin dejarlo caer.',
+  'Forma una estatua grupal divertida con dos voluntarios.',
+  'Haz que otro participante te enseñe un movimiento de baile.',
+].map((text, i) => ({
+  id: 'presencial-' + (i + 1),
+  text,
+  type: 'reto' as const,
+  intensity: 'divertido' as const,
+  categories: ['amistad', 'humor', 'creatividad'] as Category[],
+  callFriendly: false,
+}))
+
+/** Retos diseñados específicamente para una llamada de voz o vídeo. */
+const remoteDares: Activity[] = [
+  'Cambia tu nombre visible en la llamada por un apodo gracioso durante una ronda, si la aplicación lo permite.',
+  'Haz una mini presentación de un objeto cercano como si estuvieras vendiéndolo por televisión.',
+  'Muestra a cámara algo de color azul en veinte segundos, si usas vídeo.',
+  'Envía un emoji al chat de la llamada que describa tu día.',
+  'Cuenta una historia inventada de treinta segundos utilizando tres palabras propuestas en el chat.',
+  'Haz un sonido misterioso y deja que los demás adivinen qué lo produjo.',
+  'Imita la voz de un personaje y deja que la llamada adivine cuál es.',
+  'Escribe un titular absurdo de noticias en el chat de la llamada.',
+  'Describe un dibujo imaginario y deja que los demás intenten dibujarlo.',
+  'Haz una recomendación de canción para el grupo en quince segundos.',
+  'Comparte una anécdota graciosa que se pueda contar sin enseñar mensajes privados.',
+  'Crea un brindis divertido de diez segundos sin necesidad de beber nada.',
+].map((text, i) => ({
+  id: 'llamada-' + (i + 1),
+  text,
+  type: 'reto' as const,
+  intensity: 'divertido' as const,
+  categories: ['llamada', 'humor', 'creatividad'] as Category[],
+  callFriendly: true,
+}))
+
+export const activities: Activity[] = [...truths.map((text, i) => { const [intensity, categories, callFriendly] = truthMeta(i); return { id: `v-${i+1}`, text, type: 'verdad' as const, intensity, categories, callFriendly } }), ...dares.map((text, i) => { const [intensity, categories, callFriendly] = dareMeta(i); return { id: `r-${i+1}`, text, type: 'reto' as const, intensity, categories, callFriendly } }), ...inPersonDares, ...remoteDares]
 export const intensities = [{id:'todas',label:'Todas',detail:'Una mezcla de todo'},{id:'suave',label:'Suave',detail:'Para entrar en confianza'},{id:'divertido',label:'Divertido',detail:'Risas y creatividad'},{id:'coqueto',label:'Coqueto',detail:'Un toque de romance'},{id:'picante',label:'Picante +18',detail:'Preguntas y retos atrevidos para adultos'}] as const
 export const categories: {id: Category; label: string}[] = [{id:'personal',label:'Personal'},{id:'amistad',label:'Amistad'},{id:'humor',label:'Humor'},{id:'creatividad',label:'Creatividad'},{id:'imaginacion',label:'Imaginación'},{id:'romantico',label:'Romántico'},{id:'bienestar',label:'Bienestar'},{id:'llamada',label:'Modo llamada'}]
