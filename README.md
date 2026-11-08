@@ -1,28 +1,47 @@
-# Verdad o Reto
+# Juegos+ — juegos para amigos y llamadas
 
-Juego social de **Verdad o Reto**, creado con Next.js, TypeScript y React. Se puede usar en un solo dispositivo, sin crear cuentas.
+Aplicación web de juegos sociales hecha con Next.js 16, React y TypeScript. Se juega desde un mismo dispositivo, sin cuentas y sin instalaciones.
 
-## Cómo jugar
-1. Escoge **Presencial** si están juntos o **Por llamada** si juegan por WhatsApp, Meet o Discord.
-2. Elige un ambiente: Amigos, Parejas, Fiesta o Personalizado.
-3. Agrega hasta 12 jugadores (opcional) y empieza.
-4. Elige Verdad o Reto. Puedes pasar cualquier actividad sin penalización.
+## Juegos disponibles
 
-El contenido +18 está **desactivado por defecto** y debe habilitarse explícitamente por una persona adulta. Las preguntas no se repiten durante una partida, salvo que se reinicie el mazo.
+- **Verdad o Reto**: más de 300 preguntas y retos, filtros de intensidad y categorías. El contenido +18 requiere activación explícita y no se conserva al recargar.
+- **Yo nunca nunca**: 36 frases, con contador opcional de personas que lo hicieron.
+- **¿Qué prefieres?**: 36 dilemas con contadores para votar A o B.
+- **¿Quién es más probable que…?**: 36 preguntas para votar por los participantes que agregaste.
 
-### Importante sobre el modo llamada
-El modo llamada selecciona actividades que se pueden realizar a distancia, pero **no inicia una videollamada ni sincroniza varios teléfonos**. Por ahora una persona dirige el juego y comparte la pantalla o lee las actividades. Las salas compartidas en tiempo real son una mejora posterior.
+Los juegos evitan repetir preguntas mientras el mazo no se agote. Puedes mezclar las cartas de nuevo en cualquier momento.
 
-## Desarrollo
+## Modos de juego
 
-Se requiere Node.js 22 y pnpm 12.3.4.
+1. En la portada elige uno de los cuatro juegos.
+2. Indica si están juntos (**Presencial**) o jugando por **Llamada**.
+3. Escoge el ambiente: Amigos, Parejas, Fiesta o Todos.
+4. Si deseas, registra entre 2 y 12 participantes para utilizar la **ruleta animada**.
+5. Saca una carta, usa los botones de votación si el juego los tiene, cambia de turno o pasa sin penalización.
+
+**Modo llamada:** el juego contiene actividades compatibles con hablar por WhatsApp, Meet o Discord, pero **no crea llamadas ni salas sincronizadas en tiempo real**. Una persona dirige la partida y puede compartir pantalla.
+
+## Personalización
+
+El botón flotante **Diseño** permite elegir entre Neon Party, Party Pop, Midnight y Candy Play, incluso durante una partida. La preferencia se guarda únicamente en el navegador.
+
+## Herramientas
+
+- Ruleta con nombres, giro visual y selección aleatoria. Evita repetir inmediatamente al jugador actual.
+- Temporizador configurable de 15, 30 o 60 segundos.
+- Sin registro. Nombres, juego elegido, configuración y cartas utilizadas guardados en `localStorage`.
+- Animaciones adaptadas a la configuración de movimiento reducido de tu dispositivo.
+
+## Ejecutar
+
+Con Node.js 22+ y pnpm 12.3.4:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-## Verificaciones
+Para revisar el proyecto:
 
 ```bash
 pnpm test
@@ -30,5 +49,4 @@ pnpm exec tsc --noEmit
 pnpm build
 ```
 
-## Privacidad
-La configuración de la partida se guarda localmente en el navegador mediante localStorage. No se requiere cuenta ni se envían nombres de participantes a un servidor del juego. Se incluye Vercel Analytics en producción.
+El repositorio contiene comprobaciones automáticas en GitHub Actions. En producción también se usa Vercel Analytics.

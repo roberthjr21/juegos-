@@ -1,130 +1,425 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Check, ChevronRight, Clock3, Flame, Heart, Palette, Phone, Plus, RotateCcw, Shuffle, Sparkles, Trash2, Users, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronRight, Clock3, Flame, Heart, Plus, RotateCcw, RotateCw, Shuffle, Sparkles, Trash2, Users, X } from 'lucide-react'
 import { activities, categories, intensities, type Activity, type ActivityType, type Category, type Intensity } from '@/data/gameData'
-import { filterActivities, nextPlayerIndex, pickActivity, randomPlayerIndex, remainingActivities, roundNumber, type GamePreset, type PlayStyle } from '@/lib/gameEngine'
+import { gameCatalog, partyPrompts, type PartyPrompt, type SocialGameId } from '@/data/partyGames'
+import { filterActivities, nextPlayerIndex, pickActivity, remainingActivities, roundNumber, type GamePreset, type PlayStyle } from '@/lib/gameEngine'
+import { drawPartyPrompt, eligiblePartyPrompts, remainingPartyPrompts } from '@/lib/partyEngine'
+import { ThemePicker, themeIds, type ThemeName } from '@/components/ThemePicker'
+import { PlayerWheel } from '@/components/PlayerWheel'
 
 type Screen = 'home' | 'setup' | 'game'
-type ThemeName = 'neon' | 'pop' | 'midnight' | 'candy'
-const themes: { id: ThemeName; name: string; description: string; colors: string[] }[] = [
-  { id: 'neon', name: 'Neon Party', description: 'Oscuro y eléctrico', colors: ['#111126', '#8a4bff', '#f445a0'] },
-  { id: 'pop', name: 'Party Pop', description: 'Alegre y colorido', colors: ['#fff1bb', '#ff6868', '#4869f0'] },
-  { id: 'midnight', name: 'Midnight', description: 'Elegante y sobrio', colors: ['#111419', '#c5a174', '#f7f3ed'] },
-  { id: 'candy', name: 'Candy Play', description: 'Suave y amigable', colors: ['#f6efff', '#8651df', '#f486a7'] },
+const presets: { id: GamePreset; label: string; emoji: string }[] = [
+  { id: 'amigos', label: 'Amigos', emoji: '👥' },
+  { id: 'parejas', label: 'Parejas', emoji: '💖' },
+  { id: 'fiesta', label: 'Fiesta', emoji: '🎉' },
+  { id: 'personalizado', label: 'Todos', emoji: '✨' },
 ]
-
+const storedKey = 'verdad-o-reto:v2'
+const savedThemes = 'verdad-o-reto:theme'
 
 export default function Page() {
+  const [hydrated, setHydrated] = useState(false)
   const [screen, setScreen] = useState<Screen>('home')
   const [theme, setTheme] = useState<ThemeName>('candy')
-  const [themeOpen, setThemeOpen] = useState(false)
+  const [gameId, setGameId] = useState<SocialGameId>('verdad-reto')
   const [players, setPlayers] = useState<string[]>([])
   const [newPlayer, setNewPlayer] = useState('')
-  const [intensity, setIntensity] = useState<Intensity | 'todas'>('todas')
+  const [inputHint, setInputHint] = useState('')
   const [playStyle, setPlayStyle] = useState<PlayStyle>('presencial')
   const [preset, setPreset] = useState<GamePreset>('amigos')
-  const [adultConfirmed, setAdultConfirmed] = useState(false)
+  const [intensity, setIntensity] = useState<Intensity | 'todas'>('todas')
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([])
+  const [adultConfirmed, setAdultConfirmed] = useState(false)
+  const [turn, setTurn] = useState(0)
   const [completedTurns, setCompletedTurns] = useState(0)
+  const [used, setUsed] = useState<string[]>([])
+  const [current, setCurrent] = useState<Activity | null>(null)
+  const [partyCurrent, setPartyCurrent] = useState<PartyPrompt | null>(null)
+  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
+  const [notice, setNotice] = useState('')
+  const [wheelOpen, setWheelOpen] = useState(false)
   const [seconds, setSeconds] = useState(30)
   const [timeLeft, setTimeLeft] = useState(30)
   const [timerRunning, setTimerRunning] = useState(false)
-  const [hydrated, setHydrated] = useState(false)
-  const [turn, setTurn] = useState(0)
-  const [current, setCurrent] = useState<Activity | null>(null)
-  const [used, setUsed] = useState<string[]>([])
-  const [notice, setNotice] = useState('')
 
-  const filtered = useMemo(() => filterActivities(activities, { intensity, categories: selectedCategories, playStyle, preset, allowAdult: adultConfirmed }), [intensity, selectedCategories, playStyle, preset, adultConfirmed])
-  const remaining = (type: ActivityType) => remainingActivities(filtered, used, type)
-  const currentIsValid = current ? filtered.some((activity) => activity.id === current.id) : true
-  const displayedCurrent = currentIsValid ? current : null
+  const filteredTruths = useMemo(() =>
+    filterActivities(activities, { intensity, categories: selectedCategories, playStyle, preset, allowAdult: adultConfirmed }),
+    [intensity, selectedCategories, playStyle, preset, adultConfirmed],
+  )
+  const filteredParty = useMemo(() =>
+    gameId === 'verdad-reto' ? [] : eligiblePartyPrompts(partyPrompts, gameId, preset),
+    [gameId, preset],
+  )
+  const displayedTruth = current && filteredTruths.some((activity) => activity.id === current.id) ? current : null
+  const displayedParty = partyCurrent && filteredParty.some((prompt) => prompt.id === partyCurrent.id) ? partyCurrent : null
+  const activeGame = gameCatalog.find((game) => game.id === gameId) ?? gameCatalog[0]
+  const available = gameId === 'verdad-reto'
+    ? remainingActivities(filteredTruths, used, 'verdad') + remainingActivities(filteredTruths, used, 'reto')
+    : remainingPartyPrompts(filteredParty, used)
 
   useEffect(() => {
     try {
-      const storedTheme = localStorage.getItem('verdad-o-reto:theme')
-      if (themes.some((item) => item.id === storedTheme)) setTheme(storedTheme as ThemeName)
-      const raw = localStorage.getItem('verdad-o-reto:v2')
+      const savedTheme = localStorage.getItem(savedThemes)
+      if (themeIds.some((id) => id === savedTheme)) setTheme(savedTheme as ThemeName)
+      const raw = localStorage.getItem(storedKey)
       if (raw) {
         const saved = JSON.parse(raw) as Record<string, unknown>
+        if (gameCatalog.some((game) => game.id === saved.gameId)) setGameId(saved.gameId as SocialGameId)
         if (Array.isArray(saved.players)) setPlayers(saved.players.filter((p): p is string => typeof p === 'string').slice(0, 12))
-        if (saved.playStyle === 'llamada' || saved.playStyle === 'presencial') setPlayStyle(saved.playStyle)
-        if (saved.preset === 'amigos' || saved.preset === 'parejas' || saved.preset === 'fiesta' || saved.preset === 'personalizado') setPreset(saved.preset)
-        if (saved.intensity === 'suave' || saved.intensity === 'divertido' || saved.intensity === 'coqueto' || saved.intensity === 'todas') setIntensity(saved.intensity)
-        // La confirmación +18 siempre se restablece al abrir la aplicación.
-        if (Array.isArray(saved.categories)) setSelectedCategories(saved.categories.filter((c): c is Category => categories.some((category) => category.id === c)))
+        if (saved.playStyle === 'presencial' || saved.playStyle === 'llamada') setPlayStyle(saved.playStyle)
+        if (presets.some((item) => item.id === saved.preset)) setPreset(saved.preset as GamePreset)
+        if (['todas', 'suave', 'divertido', 'coqueto'].includes(String(saved.intensity))) setIntensity(saved.intensity as Intensity | 'todas')
+        if (Array.isArray(saved.categories)) setSelectedCategories(saved.categories.filter((cat): cat is Category => categories.some((c) => c.id === cat)))
         if (Array.isArray(saved.used)) setUsed(saved.used.filter((id): id is string => typeof id === 'string'))
         if (typeof saved.turn === 'number' && Number.isInteger(saved.turn) && saved.turn >= 0) setTurn(saved.turn)
         if (typeof saved.completedTurns === 'number' && Number.isInteger(saved.completedTurns) && saved.completedTurns >= 0) setCompletedTurns(saved.completedTurns)
-        if (saved.screen === 'game' || saved.screen === 'setup') setScreen(saved.screen)
+        if (saved.screen === 'setup' || saved.screen === 'game') setScreen(saved.screen)
       }
-    } catch { /* Partida anterior inválida; comenzar de cero. */ }
+    } catch { /* Un estado anterior inválido no impide jugar. */ }
     setHydrated(true)
   }, [])
 
   useEffect(() => {
     if (!hydrated) return
-
-
-    try { localStorage.setItem('verdad-o-reto:theme', theme) } catch { /* Tema temporal si no hay almacenamiento. */ }
-  }, [theme, hydrated])
+    try { localStorage.setItem(savedThemes, theme) } catch { /* Sin almacenamiento disponible. */ }
+  }, [hydrated, theme])
 
   useEffect(() => {
     if (!hydrated) return
     try {
-      localStorage.setItem('verdad-o-reto:v2', JSON.stringify({
-        screen, players, playStyle, preset, intensity: intensity === 'picante' ? 'todas' : intensity,
+      localStorage.setItem(storedKey, JSON.stringify({
+        screen, theme, gameId, players, playStyle, preset,
+        intensity: intensity === 'picante' ? 'todas' : intensity,
         categories: selectedCategories, used, turn, completedTurns,
       }))
-    } catch { /* El juego sigue funcionando si no hay almacenamiento. */ }
-  }, [hydrated, screen, players, playStyle, preset, intensity, selectedCategories, used, turn, completedTurns])
+    } catch { /* El juego también funciona sin localStorage. */ }
+  }, [hydrated, screen, theme, gameId, players, playStyle, preset, intensity, selectedCategories, used, turn, completedTurns])
 
   useEffect(() => {
     if (!timerRunning) return
-    if (timeLeft <= 0) return
-    const timer = window.setInterval(() => setTimeLeft((value) => Math.max(0, value - 1)), 1000)
-    return () => window.clearInterval(timer)
-  }, [timerRunning, timeLeft])
+    const interval = window.setInterval(() => setTimeLeft((time) => Math.max(0, time - 1)), 1000)
+    return () => window.clearInterval(interval)
+  }, [timerRunning])
+
+  useEffect(() => { if (timeLeft === 0) setTimerRunning(false) }, [timeLeft])
 
   function resetTimer() { setTimerRunning(false); setTimeLeft(seconds) }
-  function nextTurn() { setCompletedTurns((value) => value + 1); if (players.length) setTurn((value) => nextPlayerIndex(value, players.length)); setCurrent(null); setNotice(''); resetTimer() }
-  function spinPlayer() { if (players.length > 1) { setTurn((value) => randomPlayerIndex(value, players.length)); setCurrent(null); resetTimer() } }
+  function clearCard() {
+    setCurrent(null)
+    setPartyCurrent(null)
+    setVoteCounts({})
+    setNotice('')
+    resetTimer()
+  }
+  function chooseGame(id: SocialGameId) {
+    setGameId(id)
+    setUsed([])
+    setTurn(0)
+    setCompletedTurns(0)
+    clearCard()
+    setScreen('setup')
+  }
+  function resetGame() {
+    setScreen('home')
+    setGameId('verdad-reto')
+    setUsed([])
+    setCompletedTurns(0)
+    setTurn(0)
+    setAdultConfirmed(false)
+    setIntensity('todas')
+    clearCard()
+  }
+  function nextTurn() {
+    setCompletedTurns((value) => value + 1)
+    setTurn((value) => nextPlayerIndex(value, players.length))
+    clearCard()
+  }
+  function addPlayer() {
+    const name = newPlayer.trim().slice(0, 32)
+    if (!name) return
+    if (players.length >= 12) { setInputHint('Puedes agregar hasta 12 jugadores.'); return }
+    if (players.some((player) => player.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      setInputHint('Ese nombre ya está en la partida.')
+      return
+    }
+    setPlayers((previous) => [...previous, name])
+    setNewPlayer('')
+    setInputHint('')
+  }
+  function removePlayer(index: number) {
+    setPlayers((previous) => previous.filter((_, i) => i !== index))
+    setTurn(0)
+  }
+  function drawTruth(type: ActivityType) {
+    const activity = pickActivity(filteredTruths, used, type)
+    if (!activity) {
+      clearCard()
+      setNotice('Se acabaron las actividades de este tipo. Mezcla el mazo o cambia los filtros.')
+      return
+    }
+    setUsed((previous) => [...previous, activity.id])
+    setCurrent(activity)
+    setPartyCurrent(null)
+    setNotice('')
+    resetTimer()
+  }
+  function drawSocial() {
+    const next = drawPartyPrompt(filteredParty, used)
+    if (!next) {
+      clearCard()
+      setNotice('Ya salieron todas las cartas de este juego. Mezcla el mazo para volver a jugar.')
+      return
+    }
+    setUsed((previous) => [...previous, next.id])
+    setPartyCurrent(next)
+    setCurrent(null)
+    setVoteCounts({})
+    setNotice('')
+    resetTimer()
+  }
+  function addVote(key: string) { setVoteCounts((previous) => ({ ...previous, [key]: (previous[key] || 0) + 1 })) }
+  function mixCards() { setUsed([]); clearCard() }
+  function setGamePreset(value: GamePreset) { setPreset(value); setUsed([]); clearCard() }
+  function setGameStyle(value: PlayStyle) { setPlayStyle(value); setUsed([]); clearCard() }
 
+  const themePicker = <ThemePicker theme={theme} onChange={setTheme}/>
+  const logo = <div className="brand"><span className="brand-mark"><Sparkles size={19}/></span><span>juegos<span className="brand-accent">+</span></span></div>
+  const appClass = 'app-shell theme-' + theme
 
-  function addPlayer() { const name = newPlayer.trim().slice(0, 32); if (name && players.length < 12 && !players.some((p) => p.toLocaleLowerCase() === name.toLocaleLowerCase())) { setPlayers([...players, name]); setNewPlayer('') } }
-  function draw(type: ActivityType) { const activity = pickActivity(filtered, used, type); if (!activity) { setCurrent(null); setNotice('No quedan actividades con estos filtros. Mezcla de nuevo o cambia la configuración.'); return } setCurrent(activity); setUsed((previous) => [...previous, activity.id]); setNotice(''); resetTimer() }
-  function another() { if (displayedCurrent) draw(displayedCurrent.type) }
-  function resetGame() { setCurrent(null); setUsed([]); setTurn(0); setCompletedTurns(0); setNotice(''); resetTimer(); setAdultConfirmed(false); setIntensity('todas'); setScreen('home') }
-  function nextPlayer() { nextTurn() }
-  function toggleCategory(category: Category) { setSelectedCategories(selectedCategories.includes(category) ? selectedCategories.filter((c) => c !== category) : [...selectedCategories, category]) }
+  if (!hydrated) return <main className={appClass}><div className="loading-state">Preparando los juegos…</div></main>
 
-  const themePicker = (
-    <div className="theme-dock">
-      {themeOpen && (
-        <div className="theme-popover" id="theme-options" role="group" aria-label="Diseños disponibles">
-          <div className="theme-popover-heading"><strong>Elige tu estilo</strong><button type="button" aria-label="Cerrar diseños" onClick={() => setThemeOpen(false)}><X size={17}/></button></div>
-          <p>Prueba los cuatro diseños. Puedes cambiarlos cuando quieras.</p>
-          <div className="theme-list">{themes.map((item) => (
-            <button key={item.id} type="button" className={theme === item.id ? 'theme-option selected' : 'theme-option'} aria-pressed={theme === item.id} onClick={() => { setTheme(item.id); setThemeOpen(false) }}>
-              <span className="theme-swatch" aria-hidden="true">{item.colors.map((color, index) => <span key={index} style={{ backgroundColor: color }}/>)}</span>
-              <span className="theme-option-label"><strong>{item.name}</strong><small>{item.description}</small></span>
-              {theme === item.id && <Check size={17}/>}
+  if (screen === 'home') return (
+    <main className={appClass + ' hub-screen'}>
+      {themePicker}
+      <header className="topbar">{logo}<span className="privacy-pill">Sin cuentas · Gratis · A tu ritmo</span></header>
+      <section className="hub-hero">
+        <div className="hero-kicker"><Sparkles size={15}/> CONVIERTE CUALQUIER MOMENTO EN UNA HISTORIA</div>
+        <h1>El juego <em>lo eligen ustedes.</em></h1>
+        <p>Cuatro formas de reír, conversar y sorprenderse. Juega en persona o mientras estás en llamada.</p>
+        <div className="hub-features"><span><Users size={16}/> Con amigos</span><span><Heart size={16}/> En pareja</span><span>📞 Por llamada</span></div>
+      </section>
+      <section className="hub-library" aria-labelledby="hub-heading">
+        <div className="hub-library-head"><h2 id="hub-heading">¿Qué jugamos hoy?</h2><span>Elige un juego para comenzar</span></div>
+        <div className="hub-grid">
+          {gameCatalog.map((game, index) => (
+            <button className={'hub-game-card game-accent-' + index} key={game.id} type="button" onClick={() => chooseGame(game.id)}>
+              <span className="game-emoji" aria-hidden="true">{game.emoji}</span>
+              <span className="hub-game-title">{game.title}</span>
+              <span className="hub-game-desc">{game.description}</span>
+              <span className="hub-game-action">Jugar ahora <ArrowRight size={17}/></span>
             </button>
-          ))}</div>
+          ))}
         </div>
-      )}
-      <button className="theme-trigger" type="button" onClick={() => setThemeOpen((open) => !open)} aria-expanded={themeOpen} aria-controls="theme-options" aria-label="Cambiar diseño de la página" title="Cambiar diseño">
-        <Palette size={20} strokeWidth={2}/><span>Diseño</span>
-      </button>
-    </div>
+        <p className="hub-note">El diseño se puede cambiar desde el botón <strong>Diseño</strong> en la esquina inferior derecha.</p>
+      </section>
+    </main>
   )
 
-  if (!hydrated) return <main className={`app-shell theme-${theme}`}>{themePicker}<div className="loading-state">Preparando tu partida…</div></main>
+  if (screen === 'setup') return (
+    <main className={appClass + ' inner'}>
+      {themePicker}
+      <header className="topbar">
+        <button className="back-button" onClick={() => setScreen('home')}><ArrowLeft size={16}/> Juegos</button>
+        {logo}<span className="step-label">Configurar partida</span>
+      </header>
+      <section className="setup-grid">
+        <div className="setup-main">
+          <span className="section-kicker">TU PRÓXIMA PARTIDA</span>
+          <div className="setup-game-title"><span className="setup-game-emoji">{activeGame.emoji}</span><div><h1>{activeGame.title}</h1><p className="muted">{activeGame.description}</p></div></div>
+          <div className="config-choice">
+            <strong>¿Cómo van a jugar?</strong>
+            <div className="config-options">
+              <button type="button" className={playStyle === 'presencial' ? 'active' : ''} aria-pressed={playStyle === 'presencial'} onClick={() => setGameStyle('presencial')}><Users size={16}/> Presencial</button>
+              <button type="button" className={playStyle === 'llamada' ? 'active' : ''} aria-pressed={playStyle === 'llamada'} onClick={() => setGameStyle('llamada')}>📞 Por llamada</button>
+            </div>
+            <p className="muted">{playStyle === 'llamada' ? 'Para jugar por WhatsApp, Meet o Discord. Una persona dirige las cartas o comparte su pantalla.' : 'Para quienes están juntos, utilizando un solo celular o computador.'}</p>
+          </div>
+          <div className="config-choice">
+            <strong>Elige el ambiente</strong>
+            <div className="config-options">
+              {presets.map((item) => (
+                <button type="button" key={item.id} className={preset === item.id ? 'active' : ''}
+                  aria-pressed={preset === item.id} onClick={() => setGamePreset(item.id)}>{item.emoji} {item.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="setup-players-heading"><h2>¿Quiénes van a jugar?</h2><span>{players.length}/12</span></div>
+          <p className="muted">Agrega nombres para turnos y ruleta. También puedes jugar sin registrarlos.</p>
+          <div className="player-input">
+            <input value={newPlayer} onChange={(e) => setNewPlayer(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) addPlayer() }}
+              placeholder="Nombre del participante" maxLength={32} aria-label="Nombre del participante"/>
+            <button type="button" onClick={addPlayer} aria-label="Añadir participante"><Plus size={20}/></button>
+          </div>
+          {inputHint && <p className="input-hint" role="status">{inputHint}</p>}
+          <div className="players-list">
+            {players.map((player, i) => (
+              <div className="player-chip" key={i + '-' + player}><span>{player.charAt(0).toUpperCase()}</span>{player}
+                <button type="button" onClick={() => removePlayer(i)} aria-label={'Eliminar a ' + player}><X size={15}/></button>
+              </div>
+            ))}
+          </div>
+          {!players.length && <div className="empty-players"><Users size={22}/><span>Sin nombres por ahora. El turno será libre.</span></div>}
+          <button className="primary-cta setup-cta" onClick={() => { clearCard(); setScreen('game') }}>¡A jugar! <ChevronRight size={18}/></button>
+        </div>
+        <aside className="setup-note">
+          <div className="note-icon"><Heart size={22}/></div>
+          <h3>Sin presiones</h3>
+          <p>Se vale pasar cualquier pregunta o reto. Todos deciden qué quieren compartir.</p>
+          <div className="note-line"/>
+          <span>Sin cuentas. Los nombres y ajustes de la partida se guardan solamente en este navegador.</span>
+          <div className="note-line"/>
+          <span>Para usar la ruleta agrega al menos dos nombres.</span>
+        </aside>
+      </section>
+    </main>
+  )
 
-  if (screen === 'home') return <main className={`app-shell theme-${theme}`}>{themePicker}<div className="orb orb-one"/><div className="orb orb-two"/><header className="topbar"><div className="brand"><span className="brand-mark"><Sparkles data-icon="inline-start"/></span><span>verdad<span className="brand-accent">o</span>reto</span></div><span className="privacy-pill">Sin cuentas · Sin datos</span></header><section className="hero"><div className="hero-kicker"><Sparkles data-icon="inline-start"/> La excusa perfecta para conectar</div><h1>Verdad<br/><em>o reto</em></h1><p>Preguntas que acercan, retos que hacen reír<br className="desktop"/> y momentos para recordar.</p><button className="primary-cta" onClick={() => setScreen('setup')}>Comenzar a jugar <ChevronRight data-icon="inline-end"/></button><div className="feature-row"><span><Users data-icon="inline-start"/> Para grupos</span><span><Heart data-icon="inline-start"/> Sin presión</span><span><Phone data-icon="inline-start"/> También en llamada</span></div></section><div className="floating-card card-left"><span>✨</span><b>Tu turno</b><small>¡Que empiece la diversión!</small></div><div className="floating-card card-right"><Heart fill="currentColor"/><b>150 + 150</b><small>preguntas y retos originales</small></div><footer className="home-footer">Una invitación a pasarla bien, a tu manera.</footer></main>
+  return (
+    <main className={appClass + ' inner game-screen'}>
+      {themePicker}
+      {wheelOpen && players.length > 1 && <PlayerWheel players={players} currentIndex={turn % players.length}
+        onSelect={(index) => { setTurn(index); clearCard() }} onClose={() => setWheelOpen(false)}/>}
+      <header className="topbar">
+        <button className="back-button" onClick={() => { clearCard(); setScreen('setup') }}><ArrowLeft size={16}/> Configuración</button>
+        {logo}
+        <button className="reset-link" onClick={resetGame}><RotateCcw size={15}/> Juegos</button>
+      </header>
+      <section className="game-wrap social-play">
+        <div className="game-heading social-heading">
+          <div>
+            <span className="section-kicker">{activeGame.emoji} {activeGame.title.toUpperCase()} · RONDA {roundNumber(completedTurns, players.length)}</span>
+            <h2>{players.length ? <><span className="turn-name">{players[turn % players.length]}</span>, es tu turno</> : <>Que empiece <em>la diversión</em></>}</h2>
+            <div className="mode-chips"><span>{playStyle === 'llamada' ? '📞 Por llamada' : '👥 Presencial'}</span><span>{presets.find((item) => item.id === preset)?.label}</span><span>{available} cartas restantes</span></div>
+          </div>
+        </div>
+        {gameId === 'verdad-reto' && (
+          <section aria-label="Filtros de verdad o reto">
+            <div className="filter-bar">
+              <div className="intensity-tabs">
+                {intensities.filter((item) => item.id !== 'picante' || adultConfirmed).map((item) => (
+                  <button key={item.id} type="button" className={intensity === item.id ? 'active' : ''}
+                    aria-pressed={intensity === item.id} onClick={() => { setIntensity(item.id); clearCard() }}>
+                    {item.id === 'picante' && <Flame size={14}/>} {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <details className="advanced-filters">
+              <summary>Filtros y contenido +18</summary>
+              <label className="adult-control">
+                <input type="checkbox" checked={adultConfirmed} onChange={(e) => {
+                  setAdultConfirmed(e.target.checked)
+                  if (!e.target.checked && intensity === 'picante') setIntensity('todas')
+                  clearCard()
+                }}/>
+                Soy mayor de 18 años y quiero habilitar contenido picante
+              </label>
+              <div className="category-row">
+                {categories.map((cat) => <button key={cat.id} type="button" className={selectedCategories.includes(cat.id) ? 'selected' : ''}
+                  aria-pressed={selectedCategories.includes(cat.id)}
+                  onClick={() => { setSelectedCategories((before) => before.includes(cat.id) ? before.filter((c) => c !== cat.id) : [...before, cat.id]); clearCard() }}>
+                  {selectedCategories.includes(cat.id) && <Check size={13}/>} {cat.label}
+                </button>)}
+              </div>
+            </details>
+          </section>
+        )}
 
-  if (screen === 'setup') return <main className={`app-shell inner theme-${theme}`}>{themePicker}<header className="topbar"><button className="back-button" onClick={() => setScreen('home')}><ArrowLeft data-icon="inline-start"/> Volver</button><div className="brand"><span className="brand-mark"><Sparkles data-icon="inline-start"/></span><span>verdad<span className="brand-accent">o</span>reto</span></div><span className="step-label">1 / 2</span></header><section className="setup-grid"><div><div className="section-kicker">PREPAREMOS LA PARTIDA</div><div className="config-choice"><strong>¿Cómo van a jugar?</strong><div className="config-options"><button type="button" aria-pressed={playStyle === 'presencial'} className={playStyle === 'presencial' ? 'active' : ''} onClick={() => { setPlayStyle('presencial'); setCurrent(null) }}><Users data-icon="inline-start"/> Presencial</button><button type="button" aria-pressed={playStyle === 'llamada'} className={playStyle === 'llamada' ? 'active' : ''} onClick={() => { setPlayStyle('llamada'); setCurrent(null) }}><Phone data-icon="inline-start"/> Por llamada</button></div><p className="muted">{playStyle === 'llamada' ? 'Para jugar mientras hablan por WhatsApp, Meet o Discord. Una persona dirige la partida; no se crea una sala en línea.' : 'Para jugar todos juntos usando el mismo celular o computador.'}</p></div><div className="config-choice"><strong>Elige el ambiente</strong><div className="config-options">{([['amigos', 'Amigos'], ['parejas', 'Parejas'], ['fiesta', 'Fiesta'], ['personalizado', 'Personalizado']] as const).map(([id, label]) => <button key={id} type="button" className={preset === id ? 'active' : ''} aria-pressed={preset === id} onClick={() => { setPreset(id); setCurrent(null) }}>{label}</button>)}</div></div><h2>¿Quiénes están<br/><em>jugando?</em></h2><p className="muted">Añade nombres para llevar los turnos. También puedes jugar sin nombres.</p><div className="player-input"><input value={newPlayer} onChange={(e) => setNewPlayer(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) addPlayer() }} placeholder="Escribe un nombre..." aria-label="Nombre del participante"/><button onClick={addPlayer} aria-label="Añadir participante"><Plus/></button></div><div className="players-list">{players.map((player, index) => <div className="player-chip" key={`${player}-${index}`}><span>{player.charAt(0).toUpperCase()}</span>{player}<button onClick={() => { setPlayers(players.filter((_, i) => i !== index)); setTurn(0) }} aria-label={`Eliminar a ${player}`}><X/></button></div>)}</div>{!players.length && <div className="empty-players"><Users/><span>Sin nombres por ahora.<br/>El turno será libre.</span></div>}<button className="primary-cta setup-cta" onClick={() => setScreen('game')}>Continuar <ChevronRight data-icon="inline-end"/></button></div><aside className="setup-note"><div className="note-icon"><Heart fill="currentColor"/></div><h3>Jueguen a su manera</h3><p>Pasar siempre es una opción. Nadie tiene que explicar por qué no quiere responder o hacer un reto.</p><div className="note-line"/><span>+18 está desactivado al comenzar · Los nombres se guardan solo en este navegador.</span></aside></section></main>
+        {notice && <div className="notice" role="status"><span>{notice}</span><button onClick={mixCards}><Shuffle size={15}/> Mezclar de nuevo</button></div>}
 
-  return <main className={`app-shell inner game-screen theme-${theme}`}>{themePicker}<header className="topbar"><button className="back-button" onClick={() => setScreen('setup')}><ArrowLeft data-icon="inline-start"/> Configuración</button><div className="brand"><span className="brand-mark"><Sparkles data-icon="inline-start"/></span><span>verdad<span className="brand-accent">o</span>reto</span></div><button className="reset-link" onClick={resetGame}><RotateCcw data-icon="inline-start"/> Reiniciar</button></header><section className="game-wrap"><div className="game-heading"><div><div className="section-kicker">RONDA {roundNumber(completedTurns, players.length)} · TURNO {completedTurns + 1}</div><h2>{players.length ? <><span className="turn-name">{players[turn % players.length]}</span>, es tu turno</> : <>Elige tu <em>destino</em></>}</h2></div><div className="counter-row"><span><b>{remaining('verdad')}</b> verdades</span><span><b>{remaining('reto')}</b> retos</span></div></div><div className="filter-bar"><div className="intensity-tabs">{intensities.filter((item) => item.id !== 'picante' || adultConfirmed).map((item) => <button key={item.id} className={intensity === item.id ? 'active' : ''} aria-pressed={intensity === item.id} onClick={() => { setIntensity(item.id); setCurrent(null); setNotice('') }}>{item.id === 'picante' && <Flame data-icon="inline-start"/>}{item.label}</button>)}</div><span className="mode-label">{playStyle === 'llamada' ? '📞 Por llamada' : '👥 Presencial'} · {preset}</span></div><div className="adult-control"><label><input type="checkbox" checked={adultConfirmed} onChange={(e) => { setAdultConfirmed(e.target.checked); if (!e.target.checked && intensity === 'picante') setIntensity('todas'); setCurrent(null) }}/> Confirmo que soy mayor de 18 años y quiero habilitar contenido picante</label></div><div className="category-row">{categories.map((cat) => <button key={cat.id} className={selectedCategories.includes(cat.id) ? 'selected' : ''} aria-pressed={selectedCategories.includes(cat.id)} onClick={() => { toggleCategory(cat.id); setCurrent(null) }}>{selectedCategories.includes(cat.id) && <Check data-icon="inline-start"/>}{cat.label}</button>)}</div>{notice && <div className="notice"><span>{notice}</span><button onClick={() => { setUsed([]); setNotice('') }}><Shuffle data-icon="inline-start"/> Mezclar</button></div>}{displayedCurrent ? <div className={`activity-card ${displayedCurrent.type}`}><div className="activity-top"><span className="activity-type">{displayedCurrent.type === 'verdad' ? 'VERDAD' : 'RETO'}</span><span className="activity-number">{displayedCurrent.id.replace('-', ' · ')}</span></div><p>{displayedCurrent.text}</p><div className="activity-actions"><button onClick={another}><Shuffle data-icon="inline-start"/> Otra actividad</button><button onClick={() => { nextTurn(); setNotice('Actividad pasada. Sin penalización.') }}><Trash2 data-icon="inline-start"/> Pasar</button><button className="next-button" onClick={nextPlayer}>{players.length ? 'Siguiente jugador' : 'Siguiente turno'} <ChevronRight data-icon="inline-end"/></button></div></div> : <div className="choose-card"><div className="choose-icon"><Sparkles/></div><h3>¿Verdad o reto?</h3><p>Elige una opción para recibir una actividad al azar.</p><div className="choice-buttons"><button className="truth" onClick={() => draw('verdad')}><span>VERDAD</span><small>Una pregunta para conectar</small></button><button className="dare" onClick={() => draw('reto')}><span>RETO</span><small>Algo para animar la ronda</small></button></div></div>}<div className="game-tools"><div className="timer-tool"><Clock3 size={17}/><span aria-live="polite">{String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}</span><select aria-label="Duración del temporizador" value={seconds} onChange={(e) => { const n = Number(e.target.value); setSeconds(n); setTimeLeft(n); setTimerRunning(false) }}><option value={15}>15 s</option><option value={30}>30 s</option><option value={60}>60 s</option></select><button onClick={() => setTimerRunning((running) => !running)}>{timerRunning ? 'Pausar' : 'Iniciar'}</button><button onClick={resetTimer}>Reiniciar tiempo</button></div>{players.length > 1 && <button className="spin-button" onClick={spinPlayer}><Shuffle size={16}/> Elegir jugador al azar</button>}</div><p className="respect-note"><Heart fill="currentColor" data-icon="inline-start"/> Puedes pasar cualquier actividad si no te sientes cómodo/a.</p></section></main>
+        {gameId === 'verdad-reto' ? (
+          displayedTruth ? (
+            <article className={'play-card reveal-card ' + displayedTruth.type} key={displayedTruth.id}>
+              <div className="play-card-top"><span className="play-type">{displayedTruth.type === 'verdad' ? '💬 VERDAD' : '⚡ RETO'}</span><span>#{displayedTruth.id.replace('-', '')}</span></div>
+              <p className="play-prompt">{displayedTruth.text}</p>
+              <div className="play-actions">
+                <button type="button" onClick={() => drawTruth(displayedTruth.type)}><Shuffle size={16}/> Otra carta</button>
+                <button type="button" onClick={nextTurn}><Trash2 size={16}/> Pasar</button>
+                <button type="button" className="next-button" onClick={nextTurn}>Siguiente turno <ArrowRight size={16}/></button>
+              </div>
+            </article>
+          ) : (
+            <div className="play-card choice-panel">
+              <span className="choice-sparkle">✦</span>
+              <h3>¿Verdad o reto?</h3>
+              <p>Elige una opción y deja que el juego te sorprenda.</p>
+              <div className="choice-buttons">
+                <button className="truth" disabled={remainingActivities(filteredTruths, used, 'verdad') === 0} onClick={() => drawTruth('verdad')}><span>VERDAD</span><small>Una pregunta para conectar</small></button>
+                <button className="dare" disabled={remainingActivities(filteredTruths, used, 'reto') === 0} onClick={() => drawTruth('reto')}><span>RETO</span><small>Un desafío para divertirse</small></button>
+              </div>
+              {available === 0 && <button className="remix-link" onClick={mixCards}><Shuffle size={16}/> Mezclar el mazo</button>}
+            </div>
+          )
+        ) : displayedParty ? (
+          <article className="play-card reveal-card social-card" key={displayedParty.id}>
+            <div className="play-card-top"><span className="play-type">{activeGame.emoji} {activeGame.title.toUpperCase()}</span><span>#{displayedParty.id}</span></div>
+            {gameId === 'que-prefieres' ? (
+              <>
+                <h3 className="would-title">¿Qué prefieres?</h3>
+                <p className="vote-instruction">Cada persona puede votar tocando su opción una vez.</p>
+                <div className="either-grid">
+                  <button className="either-choice option-a" onClick={() => addVote('A')}><span>A</span><strong>{displayedParty.optionA}</strong><small>{voteCounts.A || 0} votos</small></button>
+                  <span className="either-or">O</span>
+                  <button className="either-choice option-b" onClick={() => addVote('B')}><span>B</span><strong>{displayedParty.optionB}</strong><small>{voteCounts.B || 0} votos</small></button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="play-prompt">{displayedParty.text}</p>
+                {gameId === 'yo-nunca' && <div className="participation-row">
+                  <button className="participation-button" onClick={() => addVote('hice')}>🙋 Yo sí lo hice <strong>+1</strong></button>
+                  <span>{voteCounts.hice || 0} personas dijeron que sí</span>
+                </div>}
+                {gameId === 'quien-probable' && (
+                  <div className="who-votes">
+                    <p>Voten tocando el nombre de quien crean que sería. Cada toque suma un voto.</p>
+                    {players.length ? <div className="who-players">
+                      {players.map((player, index) => (
+                        <button key={index + '-' + player} onClick={() => addVote(String(index))} className="who-player">
+                          <span>{player}</span><strong>{voteCounts[String(index)] || 0} votos</strong>
+                        </button>
+                      ))}
+                    </div> : <p className="muted">Sin nombres: ¡digan en voz alta a quién elegirían!</p>}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="play-actions">
+              <button type="button" onClick={drawSocial}><Shuffle size={16}/> Otra carta</button>
+              <button type="button" onClick={nextTurn}><Trash2 size={16}/> Pasar</button>
+              <button type="button" className="next-button" onClick={nextTurn}>Siguiente turno <ArrowRight size={16}/></button>
+            </div>
+          </article>
+        ) : (
+          <div className="play-card choice-panel">
+            <span className="choice-sparkle">{activeGame.emoji}</span>
+            <h3>{activeGame.title}</h3>
+            <p>{activeGame.description}</p>
+            <button className="primary-cta draw-button" disabled={available === 0} onClick={drawSocial}><Sparkles size={18}/> Sacar una carta <ArrowRight size={18}/></button>
+            {available === 0 && <button className="remix-link" onClick={mixCards}><Shuffle size={16}/> Mezclar el mazo</button>}
+          </div>
+        )}
+
+        <div className="game-tools">
+          <div className="timer-tool">
+            <Clock3 size={18}/><strong aria-live="off">{String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}</strong>
+            <select aria-label="Segundos del temporizador" value={seconds} onChange={(e) => {
+              const amount = Number(e.target.value)
+              setSeconds(amount); setTimeLeft(amount); setTimerRunning(false)
+            }}>
+              <option value={15}>15 s</option><option value={30}>30 s</option><option value={60}>60 s</option>
+            </select>
+            <button onClick={() => setTimerRunning((running) => !running)} disabled={timeLeft === 0}>{timerRunning ? 'Pausar' : 'Iniciar'}</button>
+            <button onClick={resetTimer}><RotateCw size={14}/> Reiniciar</button>
+            {timeLeft === 0 && <span className="time-up" role="status">¡Tiempo!</span>}
+          </div>
+          {players.length > 1 && <button className="spin-button" onClick={() => setWheelOpen(true)}>🎡 Girar ruleta</button>}
+        </div>
+        <p className="respect-note"><Heart size={15}/> Se vale pasar. Lo importante es pasarla bien.</p>
+      </section>
+    </main>
+  )
 }
