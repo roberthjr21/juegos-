@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Verdad o Reto — juega a tu manera',
-  description: 'Un juego de verdad o reto para conectar, reír y compartir sin cuentas ni datos.',
+  title: 'Juegos+ — Verdad o Reto, Yo nunca nunca y más',
+  description: 'Cuatro juegos sociales gratis para amigos y parejas: Verdad o Reto, Yo nunca nunca, ¿Qué prefieres? y ¿Quién es más probable? Juega presencial o por llamada.',
   generator: 'v0.app',
   icons: {
     icon: [
