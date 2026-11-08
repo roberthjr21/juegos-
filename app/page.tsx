@@ -1,14 +1,24 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Check, ChevronRight, Clock3, Flame, Heart, Phone, Plus, RotateCcw, Save, Shuffle, Sparkles, Trash2, Users, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, Clock3, Flame, Heart, Palette, Phone, Plus, RotateCcw, Shuffle, Sparkles, Trash2, Users, X } from 'lucide-react'
 import { activities, categories, intensities, type Activity, type ActivityType, type Category, type Intensity } from '@/data/gameData'
 import { filterActivities, nextPlayerIndex, pickActivity, randomPlayerIndex, remainingActivities, roundNumber, type GamePreset, type PlayStyle } from '@/lib/gameEngine'
 
 type Screen = 'home' | 'setup' | 'game'
+type ThemeName = 'neon' | 'pop' | 'midnight' | 'candy'
+const themes: { id: ThemeName; name: string; description: string; colors: string[] }[] = [
+  { id: 'neon', name: 'Neon Party', description: 'Oscuro y eléctrico', colors: ['#111126', '#8a4bff', '#f445a0'] },
+  { id: 'pop', name: 'Party Pop', description: 'Alegre y colorido', colors: ['#fff1bb', '#ff6868', '#4869f0'] },
+  { id: 'midnight', name: 'Midnight', description: 'Elegante y sobrio', colors: ['#111419', '#c5a174', '#f7f3ed'] },
+  { id: 'candy', name: 'Candy Play', description: 'Suave y amigable', colors: ['#f6efff', '#8651df', '#f486a7'] },
+]
+
 
 export default function Page() {
   const [screen, setScreen] = useState<Screen>('home')
+  const [theme, setTheme] = useState<ThemeName>('candy')
+  const [themeOpen, setThemeOpen] = useState(false)
   const [players, setPlayers] = useState<string[]>([])
   const [newPlayer, setNewPlayer] = useState('')
   const [intensity, setIntensity] = useState<Intensity | 'todas'>('todas')
@@ -33,6 +43,8 @@ export default function Page() {
 
   useEffect(() => {
     try {
+      const storedTheme = localStorage.getItem('verdad-o-reto:theme')
+      if (themes.some((item) => item.id === storedTheme)) setTheme(storedTheme as ThemeName)
       const raw = localStorage.getItem('verdad-o-reto:v2')
       if (raw) {
         const saved = JSON.parse(raw) as Record<string, unknown>
@@ -50,6 +62,32 @@ export default function Page() {
     } catch { /* Partida anterior inválida; comenzar de cero. */ }
     setHydrated(true)
   }, [])
+
+  useEffect(() => {
+    const themePicker = (
+    <div className="theme-dock">
+      {themeOpen && (
+        <div className="theme-popover" id="theme-options" role="group" aria-label="Diseños disponibles">
+          <div className="theme-popover-heading"><strong>Elige tu estilo</strong><button type="button" aria-label="Cerrar diseños" onClick={() => setThemeOpen(false)}><X size={17}/></button></div>
+          <p>Prueba los cuatro diseños. Puedes cambiarlos cuando quieras.</p>
+          <div className="theme-list">{themes.map((item) => (
+            <button key={item.id} type="button" className={theme === item.id ? 'theme-option selected' : 'theme-option'} aria-pressed={theme === item.id} onClick={() => { setTheme(item.id); setThemeOpen(false) }}>
+              <span className="theme-swatch" aria-hidden="true">{item.colors.map((color, index) => <span key={index} style={{ backgroundColor: color }}/>)}</span>
+              <span className="theme-option-label"><strong>{item.name}</strong><small>{item.description}</small></span>
+              {theme === item.id && <Check size={17}/>}
+            </button>
+          ))}</div>
+        </div>
+      )}
+      <button className="theme-trigger" type="button" onClick={() => setThemeOpen((open) => !open)} aria-expanded={themeOpen} aria-controls="theme-options" aria-label="Cambiar diseño de la página" title="Cambiar diseño">
+        <Palette size={20} strokeWidth={2}/><span>Diseño</span>
+      </button>
+    </div>
+  )
+
+
+    try { localStorage.setItem('verdad-o-reto:theme', theme) } catch { /* Tema temporal si no hay almacenamiento. */ }
+  }, [theme, hydrated])
 
   useEffect(() => {
     if (!hydrated) return
@@ -80,9 +118,9 @@ export default function Page() {
   function nextPlayer() { nextTurn() }
   function toggleCategory(category: Category) { setSelectedCategories(selectedCategories.includes(category) ? selectedCategories.filter((c) => c !== category) : [...selectedCategories, category]) }
 
-  if (!hydrated) return <main className="app-shell"><div className="loading-state">Preparando tu partida…</div></main>
+  if (!hydrated) return <main className={`app-shell theme-${theme}`}>{themePicker}<div className="loading-state">Preparando tu partida…</div></main>
 
-  if (screen === 'home') return <main className="app-shell"><div className="orb orb-one"/><div className="orb orb-two"/><header className="topbar"><div className="brand"><span className="brand-mark"><Sparkles data-icon="inline-start"/></span><span>verdad<span className="brand-accent">o</span>reto</span></div><span className="privacy-pill">Sin cuentas · Sin datos</span></header><section className="hero"><div className="hero-kicker"><Sparkles data-icon="inline-start"/> La excusa perfecta para conectar</div><h1>Verdad<br/><em>o reto</em></h1><p>Preguntas que acercan, retos que hacen reír<br className="desktop"/> y momentos para recordar.</p><button className="primary-cta" onClick={() => setScreen('setup')}>Comenzar a jugar <ChevronRight data-icon="inline-end"/></button><div className="feature-row"><span><Users data-icon="inline-start"/> Para grupos</span><span><Heart data-icon="inline-start"/> Sin presión</span><span><Phone data-icon="inline-start"/> También en llamada</span></div></section><div className="floating-card card-left"><span>✨</span><b>Tu turno</b><small>¡Que empiece la diversión!</small></div><div className="floating-card card-right"><Heart fill="currentColor"/><b>150 + 150</b><small>preguntas y retos originales</small></div><footer className="home-footer">Una invitación a pasarla bien, a tu manera.</footer></main>
+  if (screen === 'home') return <main className={`app-shell theme-${theme}`}>{themePicker}<div className="orb orb-one"/><div className="orb orb-two"/><header className="topbar"><div className="brand"><span className="brand-mark"><Sparkles data-icon="inline-start"/></span><span>verdad<span className="brand-accent">o</span>reto</span></div><span className="privacy-pill">Sin cuentas · Sin datos</span></header><section className="hero"><div className="hero-kicker"><Sparkles data-icon="inline-start"/> La excusa perfecta para conectar</div><h1>Verdad<br/><em>o reto</em></h1><p>Preguntas que acercan, retos que hacen reír<br className="desktop"/> y momentos para recordar.</p><button className="primary-cta" onClick={() => setScreen('setup')}>Comenzar a jugar <ChevronRight data-icon="inline-end"/></button><div className="feature-row"><span><Users data-icon="inline-start"/> Para grupos</span><span><Heart data-icon="inline-start"/> Sin presión</span><span><Phone data-icon="inline-start"/> También en llamada</span></div></section><div className="floating-card card-left"><span>✨</span><b>Tu turno</b><small>¡Que empiece la diversión!</small></div><div className="floating-card card-right"><Heart fill="currentColor"/><b>150 + 150</b><small>preguntas y retos originales</small></div><footer className="home-footer">Una invitación a pasarla bien, a tu manera.</footer></main>
 
   if (screen === 'setup') return <main className="app-shell inner"><header className="topbar"><button className="back-button" onClick={() => setScreen('home')}><ArrowLeft data-icon="inline-start"/> Volver</button><div className="brand"><span className="brand-mark"><Sparkles data-icon="inline-start"/></span><span>verdad<span className="brand-accent">o</span>reto</span></div><span className="step-label">1 / 2</span></header><section className="setup-grid"><div><div className="section-kicker">PREPAREMOS LA PARTIDA</div><div className="config-choice"><strong>¿Cómo van a jugar?</strong><div className="config-options"><button type="button" aria-pressed={playStyle === 'presencial'} className={playStyle === 'presencial' ? 'active' : ''} onClick={() => { setPlayStyle('presencial'); setCurrent(null) }}><Users data-icon="inline-start"/> Presencial</button><button type="button" aria-pressed={playStyle === 'llamada'} className={playStyle === 'llamada' ? 'active' : ''} onClick={() => { setPlayStyle('llamada'); setCurrent(null) }}><Phone data-icon="inline-start"/> Por llamada</button></div><p className="muted">{playStyle === 'llamada' ? 'Para jugar mientras hablan por WhatsApp, Meet o Discord. Una persona dirige la partida; no se crea una sala en línea.' : 'Para jugar todos juntos usando el mismo celular o computador.'}</p></div><div className="config-choice"><strong>Elige el ambiente</strong><div className="config-options">{([['amigos', 'Amigos'], ['parejas', 'Parejas'], ['fiesta', 'Fiesta'], ['personalizado', 'Personalizado']] as const).map(([id, label]) => <button key={id} type="button" className={preset === id ? 'active' : ''} aria-pressed={preset === id} onClick={() => { setPreset(id); setCurrent(null) }}>{label}</button>)}</div></div><h2>¿Quiénes están<br/><em>jugando?</em></h2><p className="muted">Añade nombres para llevar los turnos. También puedes jugar sin nombres.</p><div className="player-input"><input value={newPlayer} onChange={(e) => setNewPlayer(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) addPlayer() }} placeholder="Escribe un nombre..." aria-label="Nombre del participante"/><button onClick={addPlayer} aria-label="Añadir participante"><Plus/></button></div><div className="players-list">{players.map((player, index) => <div className="player-chip" key={`${player}-${index}`}><span>{player.charAt(0).toUpperCase()}</span>{player}<button onClick={() => { setPlayers(players.filter((_, i) => i !== index)); setTurn(0) }} aria-label={`Eliminar a ${player}`}><X/></button></div>)}</div>{!players.length && <div className="empty-players"><Users/><span>Sin nombres por ahora.<br/>El turno será libre.</span></div>}<button className="primary-cta setup-cta" onClick={() => setScreen('game')}>Continuar <ChevronRight data-icon="inline-end"/></button></div><aside className="setup-note"><div className="note-icon"><Heart fill="currentColor"/></div><h3>Jueguen a su manera</h3><p>Pasar siempre es una opción. Nadie tiene que explicar por qué no quiere responder o hacer un reto.</p><div className="note-line"/><span>+18 está desactivado al comenzar · Los nombres se guardan solo en este navegador.</span></aside></section></main>
 
